@@ -140,15 +140,15 @@ func GetTarballReader(
 		}
 	}
 
-	tarballGzipReader, err := gzip.NewReader(bytes.NewReader(tarball))
+	tarballReader, err := gzip.NewReader(bytes.NewReader(tarball))
 	if err != nil {
 		return nil, httpContext, &motmedelErrors.CauseError{
-			Message: "An error occurred when creating the tarball gzip reader.",
+			Message: "An error occurred when creating the gzip reader.",
 			Cause:   err,
 		}
 	}
 
-	return tarballGzipReader, httpContext, nil
+	return tarballReader, httpContext, nil
 }
 
 func GetTarArchive(
@@ -218,40 +218,43 @@ func getTarballPrefix(response *http.Response) (string, error) {
 
 func GetUnprefixedTarArchive(
 	owner string,
-	repository string,
+	name string,
 	branch string,
 	token string,
 	httpClient motmedelHttpUtils.HttpClient,
 ) (motmedelTarTypes.Archive, *motmedelHttpTypes.HttpContext, error) {
 
-	tarArchive, httpContext, err := GetTarArchive(owner, repository, branch, token, httpClient)
+	archive, httpContext, err := GetTarArchive(owner, name, branch, token, httpClient)
 	if err != nil {
 		return nil, httpContext, &motmedelErrors.InputError{
-			Message: "An error occurred when obtaining the repository tar archive.",
+			Message: "An error occurred when obtaining the tar archive.",
 			Cause:   err,
-			Input:   []any{owner, repository, branch},
+			Input:   []any{owner, name, branch},
 		}
 	}
-	if len(tarArchive) == 0 {
+	if len(archive) == 0 {
 		return nil, httpContext, nil
 	}
 
 	response := httpContext.Response
-	repositoryTarballPrefix, err := getTarballPrefix(response)
+	prefix, err := getTarballPrefix(response)
 	if err != nil {
 		return nil, httpContext, &motmedelErrors.InputError{
-			Message: "An error occurred when obtaining the GitHub repository tarball prefix.",
+			Message: "An error occurred when obtaining the tarball prefix.",
 			Cause:   err,
 			Input:   response,
 		}
 	}
+	if prefix == "" {
+		return nil, httpContext, githubUtilsErrors.ErrEmptyTarballPrefix
+	}
 
-	unprefixedTarArchive, ok := tarArchive.SetDirectory(repositoryTarballPrefix)
+	unprefixedArchive, ok := archive.SetDirectory(prefix)
 	if !ok {
 		return nil, httpContext, motmedelTarErrors.ErrSetDirectoryError
 	}
 
-	return unprefixedTarArchive, httpContext, nil
+	return unprefixedArchive, httpContext, nil
 }
 
 func init() {

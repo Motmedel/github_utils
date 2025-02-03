@@ -11,4 +11,5 @@ var (
 	ErrNilTarballReader                = errors.New("nil tarball reader")
 	ErrNilContentDisposition           = errors.New("nil content disposition")
 	ErrEmptyContentDispositionFilename = errors.New("empty content disposition filename")
+	ErrEmptyTarballPrefix              = errors.New("empty tarball prefix")
 )
