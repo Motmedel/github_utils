@@ -7,11 +7,16 @@ import (
 	githubUtilsErrors "github.com/Motmedel/github_utils/pkg/errors"
 	motmedelErrors "github.com/Motmedel/utils_go/pkg/errors"
 	motmedelHttpErrors "github.com/Motmedel/utils_go/pkg/http/errors"
+	"github.com/Motmedel/utils_go/pkg/http/parsing/headers/content_disposition"
 	motmedelHttpTypes "github.com/Motmedel/utils_go/pkg/http/types"
 	motmedelHttpUtils "github.com/Motmedel/utils_go/pkg/http/utils"
+	motmedelTar "github.com/Motmedel/utils_go/pkg/tar"
+	motmedelTarErrors "github.com/Motmedel/utils_go/pkg/tar/errors"
+	motmedelTarTypes "github.com/Motmedel/utils_go/pkg/tar/types"
 	"net/http"
 	"net/url"
 	"path"
+	"strings"
 )
 
 const expectedTarballContentType = "application/x-gzip"
@@ -144,6 +149,109 @@ func GetTarballReader(
 	}
 
 	return tarballGzipReader, httpContext, nil
+}
+
+func GetTarArchive(
+	owner string,
+	repository string,
+	branch string,
+	token string,
+	httpClient motmedelHttpUtils.HttpClient,
+) (motmedelTarTypes.Archive, *motmedelHttpTypes.HttpContext, error) {
+	tarballReader, httpContext, err := GetTarballReader(owner, repository, branch, token, httpClient)
+	if err != nil {
+		return nil, httpContext, &motmedelErrors.InputError{
+			Message: "An error occurred when obtaining the tarball reader.",
+			Cause:   err,
+			Input:   []any{owner, repository, branch},
+		}
+	}
+	if tarballReader == nil {
+		return nil, httpContext, githubUtilsErrors.ErrNilTarballReader
+	}
+
+	archive, err := motmedelTar.MakeArchiveFromReader(tarballReader)
+	if err != nil {
+		return nil, httpContext, &motmedelErrors.InputError{
+			Message: "An occurred when making an archive from the tarball reader.",
+			Cause:   err,
+			Input:   tarballReader,
+		}
+	}
+
+	return archive, httpContext, nil
+}
+
+func getTarballPrefix(response *http.Response) (string, error) {
+	if response == nil {
+		return "", nil
+	}
+
+	responseHeader := response.Header
+	if responseHeader == nil {
+		return "", motmedelHttpErrors.ErrNilHttpResponseHeader
+	}
+
+	contentDispositionValue := responseHeader.Get("Content-Disposition")
+	contentDispositionBytes := []byte(contentDispositionValue)
+	contentDisposition, err := content_disposition.ParseContentDisposition(contentDispositionBytes)
+	if err != nil {
+		return "", &motmedelErrors.InputError{
+			Message: "An error occurred when obtaining a content disposition.",
+			Cause:   err,
+			Input:   contentDispositionBytes,
+		}
+	}
+	if contentDisposition == nil {
+		return "", githubUtilsErrors.ErrNilContentDisposition
+	}
+
+	contentDispositionFilename := contentDisposition.Filename
+	if contentDispositionFilename == "" {
+		return "", githubUtilsErrors.ErrEmptyContentDispositionFilename
+	}
+
+	tarballPrefix, _, _ := strings.Cut(contentDispositionFilename, ".")
+
+	return tarballPrefix, nil
+}
+
+func GetUnprefixedTarArchive(
+	owner string,
+	repository string,
+	branch string,
+	token string,
+	httpClient motmedelHttpUtils.HttpClient,
+) (motmedelTarTypes.Archive, *motmedelHttpTypes.HttpContext, error) {
+
+	tarArchive, httpContext, err := GetTarArchive(owner, repository, branch, token, httpClient)
+	if err != nil {
+		return nil, httpContext, &motmedelErrors.InputError{
+			Message: "An error occurred when obtaining the repository tar archive.",
+			Cause:   err,
+			Input:   []any{owner, repository, branch},
+		}
+	}
+	if len(tarArchive) == 0 {
+		return nil, httpContext, nil
+	}
+
+	response := httpContext.Response
+	repositoryTarballPrefix, err := getTarballPrefix(response)
+	if err != nil {
+		return nil, httpContext, &motmedelErrors.InputError{
+			Message: "An error occurred when obtaining the GitHub repository tarball prefix.",
+			Cause:   err,
+			Input:   response,
+		}
+	}
+
+	unprefixedTarArchive, ok := tarArchive.SetDirectory(repositoryTarballPrefix)
+	if !ok {
+		return nil, httpContext, motmedelTarErrors.ErrSetDirectoryError
+	}
+
+	return unprefixedTarArchive, httpContext, nil
 }
 
 func init() {
