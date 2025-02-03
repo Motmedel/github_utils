@@ -20,9 +20,9 @@ const reposBaseUrlString = "https://api.github.com/repos/"
 
 var reposBaseUrl *url.URL
 
-func GetRepositoryTarball(
+func GetTarball(
 	owner string,
-	repository string,
+	name string,
 	branch string,
 	token string,
 	client motmedelHttpUtils.HttpClient,
@@ -31,8 +31,8 @@ func GetRepositoryTarball(
 		return nil, nil, githubUtilsErrors.ErrEmptyOwner
 	}
 
-	if repository == "" {
-		return nil, nil, githubUtilsErrors.ErrEmptyRepository
+	if name == "" {
+		return nil, nil, githubUtilsErrors.ErrEmptyName
 	}
 
 	if branch == "" {
@@ -56,9 +56,9 @@ func GetRepositoryTarball(
 	requestUrl := *reposBaseUrl
 	// TODO: I could do additional validation here.
 	ownerSegment := url.PathEscape(owner)
-	repoSegment := url.PathEscape(repository)
+	nameSegment := url.PathEscape(name)
 	branchSegment := url.PathEscape(branch)
-	requestUrl.Path = path.Join(requestUrl.Path, ownerSegment, repoSegment, "tarball", branchSegment)
+	requestUrl.Path = path.Join(requestUrl.Path, ownerSegment, nameSegment, "tarball", branchSegment)
 
 	requestUrlString := requestUrl.String()
 
@@ -99,22 +99,22 @@ func GetRepositoryTarball(
 	return httpContext.ResponseBody, httpContext, nil
 }
 
-func GetRepositoryTarballReader(
+func GetTarballReader(
 	owner string,
-	repository string,
+	name string,
 	branch string,
 	token string,
 	client motmedelHttpUtils.HttpClient,
 ) (*gzip.Reader, *motmedelHttpTypes.HttpContext, error) {
-	repositoryTarball, httpContext, err := GetRepositoryTarball(owner, repository, branch, token, client)
+	tarball, httpContext, err := GetTarball(owner, name, branch, token, client)
 	if err != nil {
 		return nil, httpContext, &motmedelErrors.InputError{
-			Message: "An error occurred when getting the repository tarball.",
+			Message: "An error occurred when getting the tarball.",
 			Cause:   err,
-			Input:   []any{owner, repository, branch, client},
+			Input:   []any{owner, name, branch, client},
 		}
 	}
-	if len(repositoryTarball) == 0 {
+	if len(tarball) == 0 {
 		return nil, nil, nil
 	}
 
@@ -135,15 +135,15 @@ func GetRepositoryTarballReader(
 		}
 	}
 
-	repositoryTarballGzipReader, err := gzip.NewReader(bytes.NewReader(repositoryTarball))
+	tarballGzipReader, err := gzip.NewReader(bytes.NewReader(tarball))
 	if err != nil {
 		return nil, httpContext, &motmedelErrors.CauseError{
-			Message: "An error occurred when creating a tarball gzip reader.",
+			Message: "An error occurred when creating the tarball gzip reader.",
 			Cause:   err,
 		}
 	}
 
-	return repositoryTarballGzipReader, httpContext, nil
+	return tarballGzipReader, httpContext, nil
 }
 
 func init() {
