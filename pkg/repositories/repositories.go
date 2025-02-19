@@ -33,27 +33,27 @@ func GetTarball(
 	client motmedelHttpUtils.HttpClient,
 ) ([]byte, *motmedelHttpTypes.HttpContext, error) {
 	if owner == "" {
-		return nil, nil, githubUtilsErrors.ErrEmptyOwner
+		return nil, nil, motmedelErrors.MakeErrorWithStackTrace(githubUtilsErrors.ErrEmptyOwner)
 	}
 
 	if name == "" {
-		return nil, nil, githubUtilsErrors.ErrEmptyName
+		return nil, nil, motmedelErrors.MakeErrorWithStackTrace(githubUtilsErrors.ErrEmptyName)
 	}
 
 	if branch == "" {
-		return nil, nil, githubUtilsErrors.ErrEmptyBranch
+		return nil, nil, motmedelErrors.MakeErrorWithStackTrace(githubUtilsErrors.ErrEmptyBranch)
 	}
 
 	if token == "" {
-		return nil, nil, githubUtilsErrors.ErrEmptyToken
+		return nil, nil, motmedelErrors.MakeErrorWithStackTrace(githubUtilsErrors.ErrEmptyToken)
 	}
 
 	if client == nil {
-		return nil, nil, motmedelHttpErrors.ErrNilHttpClient
+		return nil, nil, motmedelErrors.MakeErrorWithStackTrace(motmedelHttpErrors.ErrNilHttpClient)
 	}
 
 	if reposBaseUrl == nil {
-		return nil, nil, githubUtilsErrors.ErrNilReposBaseUrl
+		return nil, nil, motmedelErrors.MakeErrorWithStackTrace(githubUtilsErrors.ErrNilReposBaseUrl)
 	}
 
 	requestMethod := http.MethodGet
@@ -90,11 +90,10 @@ func GetTarball(
 		},
 	)
 	if err != nil {
-		return nil, httpContext, &motmedelErrors.InputError{
-			Message: "An error occurred when sending the request.",
-			Cause:   err,
-			Input:   []any{requestMethod, requestUrlString},
-		}
+		return nil, httpContext, motmedelErrors.MakeError(
+			fmt.Errorf("send request: %w", err),
+			requestMethod, requestUrlString,
+		)
 	}
 
 	if httpContext == nil {
@@ -113,11 +112,10 @@ func GetTarballReader(
 ) (*gzip.Reader, *motmedelHttpTypes.HttpContext, error) {
 	tarball, httpContext, err := GetTarball(owner, name, branch, token, client)
 	if err != nil {
-		return nil, httpContext, &motmedelErrors.InputError{
-			Message: "An error occurred when getting the tarball.",
-			Cause:   err,
-			Input:   []any{owner, name, branch, client},
-		}
+		return nil, httpContext, motmedelErrors.MakeError(
+			fmt.Errorf("get tarball: %w", err),
+			owner, name, branch,
+		)
 	}
 	if len(tarball) == 0 {
 		return nil, nil, nil
@@ -125,27 +123,24 @@ func GetTarballReader(
 
 	response := httpContext.Response
 	if response == nil {
-		return nil, httpContext, motmedelHttpErrors.ErrNilHttpResponse
+		return nil, httpContext, motmedelErrors.MakeErrorWithStackTrace(motmedelHttpErrors.ErrNilHttpResponse)
 	}
 
 	responseHeader := response.Header
 	if responseHeader == nil {
-		return nil, httpContext, motmedelHttpErrors.ErrNilHttpResponseHeader
+		return nil, httpContext, motmedelErrors.MakeErrorWithStackTrace(motmedelHttpErrors.ErrNilHttpResponseHeader)
 	}
 
 	if contentTypeValue := responseHeader.Get("Content-Type"); contentTypeValue != expectedTarballContentType {
-		return nil, httpContext, &motmedelErrors.InputError{
-			Message: "The HTTP response does not have the expected content type.",
-			Input:   contentTypeValue,
-		}
+		return nil, httpContext, motmedelErrors.MakeErrorWithStackTrace(
+			fmt.Errorf("%w: %s", githubUtilsErrors.ErrUnexpectedContentType, contentTypeValue),
+			contentTypeValue,
+		)
 	}
 
 	tarballReader, err := gzip.NewReader(bytes.NewReader(tarball))
 	if err != nil {
-		return nil, httpContext, &motmedelErrors.CauseError{
-			Message: "An error occurred when creating the gzip reader.",
-			Cause:   err,
-		}
+		return nil, httpContext, motmedelErrors.MakeErrorWithStackTrace(fmt.Errorf("gzip new reader: %w", err))
 	}
 
 	return tarballReader, httpContext, nil
@@ -160,11 +155,10 @@ func GetTarArchive(
 ) (motmedelTarTypes.Archive, *motmedelHttpTypes.HttpContext, error) {
 	tarballReader, httpContext, err := GetTarballReader(owner, repository, branch, token, httpClient)
 	if err != nil {
-		return nil, httpContext, &motmedelErrors.InputError{
-			Message: "An error occurred when obtaining the tarball reader.",
-			Cause:   err,
-			Input:   []any{owner, repository, branch},
-		}
+		return nil, httpContext, motmedelErrors.MakeError(
+			fmt.Errorf("get tarball reader: %w", err),
+			owner, repository, branch,
+		)
 	}
 	if tarballReader == nil {
 		return nil, httpContext, githubUtilsErrors.ErrNilTarballReader
@@ -172,11 +166,10 @@ func GetTarArchive(
 
 	archive, err := motmedelTar.MakeArchiveFromReader(tarballReader)
 	if err != nil {
-		return nil, httpContext, &motmedelErrors.InputError{
-			Message: "An occurred when making an archive from the tarball reader.",
-			Cause:   err,
-			Input:   tarballReader,
-		}
+		return nil, httpContext, motmedelErrors.MakeError(
+			fmt.Errorf("make archive from reader: %w", err),
+			tarballReader,
+		)
 	}
 
 	return archive, httpContext, nil
@@ -189,26 +182,25 @@ func getTarballPrefix(response *http.Response) (string, error) {
 
 	responseHeader := response.Header
 	if responseHeader == nil {
-		return "", motmedelHttpErrors.ErrNilHttpResponseHeader
+		return "", motmedelErrors.MakeErrorWithStackTrace(motmedelHttpErrors.ErrNilHttpResponseHeader)
 	}
 
 	contentDispositionValue := responseHeader.Get("Content-Disposition")
 	contentDispositionBytes := []byte(contentDispositionValue)
 	contentDisposition, err := content_disposition.ParseContentDisposition(contentDispositionBytes)
 	if err != nil {
-		return "", &motmedelErrors.InputError{
-			Message: "An error occurred when obtaining a content disposition.",
-			Cause:   err,
-			Input:   contentDispositionBytes,
-		}
+		return "", motmedelErrors.MakeError(
+			fmt.Errorf("parse content disposition: %w", err),
+			contentDispositionBytes,
+		)
 	}
 	if contentDisposition == nil {
-		return "", githubUtilsErrors.ErrNilContentDisposition
+		return "", motmedelErrors.MakeErrorWithStackTrace(githubUtilsErrors.ErrNilContentDisposition)
 	}
 
 	contentDispositionFilename := contentDisposition.Filename
 	if contentDispositionFilename == "" {
-		return "", githubUtilsErrors.ErrEmptyContentDispositionFilename
+		return "", motmedelErrors.MakeErrorWithStackTrace(githubUtilsErrors.ErrEmptyContentDispositionFilename)
 	}
 
 	tarballPrefix, _, _ := strings.Cut(contentDispositionFilename, ".")
@@ -226,11 +218,10 @@ func GetUnprefixedTarArchive(
 
 	archive, httpContext, err := GetTarArchive(owner, name, branch, token, httpClient)
 	if err != nil {
-		return nil, httpContext, &motmedelErrors.InputError{
-			Message: "An error occurred when obtaining the tar archive.",
-			Cause:   err,
-			Input:   []any{owner, name, branch},
-		}
+		return nil, httpContext, motmedelErrors.MakeError(
+			fmt.Errorf("get tar archive: %w", err),
+			owner, name, branch,
+		)
 	}
 	if len(archive) == 0 {
 		return nil, httpContext, nil
@@ -239,19 +230,18 @@ func GetUnprefixedTarArchive(
 	response := httpContext.Response
 	prefix, err := getTarballPrefix(response)
 	if err != nil {
-		return nil, httpContext, &motmedelErrors.InputError{
-			Message: "An error occurred when obtaining the tarball prefix.",
-			Cause:   err,
-			Input:   response,
-		}
+		return nil, httpContext, motmedelErrors.MakeError(
+			fmt.Errorf("get tarball prefix: %w", err),
+			response,
+		)
 	}
 	if prefix == "" {
-		return nil, httpContext, githubUtilsErrors.ErrEmptyTarballPrefix
+		return nil, httpContext, motmedelErrors.MakeErrorWithStackTrace(githubUtilsErrors.ErrEmptyTarballPrefix)
 	}
 
 	unprefixedArchive, ok := archive.SetDirectory(prefix)
 	if !ok {
-		return nil, httpContext, motmedelTarErrors.ErrSetDirectoryError
+		return nil, httpContext, motmedelErrors.MakeErrorWithStackTrace(motmedelTarErrors.ErrSetDirectoryError)
 	}
 
 	return unprefixedArchive, httpContext, nil
