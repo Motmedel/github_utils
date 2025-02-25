@@ -28,7 +28,7 @@ var reposBaseUrl *url.URL
 func GetTarball(
 	owner string,
 	name string,
-	branch string,
+	ref string,
 	token string,
 	client motmedelHttpUtils.HttpClient,
 ) ([]byte, *motmedelHttpTypes.HttpContext, error) {
@@ -40,8 +40,8 @@ func GetTarball(
 		return nil, nil, motmedelErrors.MakeErrorWithStackTrace(githubUtilsErrors.ErrEmptyName)
 	}
 
-	if branch == "" {
-		return nil, nil, motmedelErrors.MakeErrorWithStackTrace(githubUtilsErrors.ErrEmptyBranch)
+	if ref == "" {
+		return nil, nil, motmedelErrors.MakeErrorWithStackTrace(githubUtilsErrors.ErrEmptyRef)
 	}
 
 	if token == "" {
@@ -62,7 +62,7 @@ func GetTarball(
 	// TODO: I could do additional validation here.
 	ownerSegment := url.PathEscape(owner)
 	nameSegment := url.PathEscape(name)
-	branchSegment := url.PathEscape(branch)
+	branchSegment := url.PathEscape(ref)
 	requestUrl.Path = path.Join(requestUrl.Path, ownerSegment, nameSegment, "tarball", branchSegment)
 
 	requestUrlString := requestUrl.String()
@@ -73,13 +73,14 @@ func GetTarball(
 		requestUrlString,
 		nil,
 		func(request *http.Request) error {
+			// TODO: Use proper errors.
 			if request == nil {
-				return motmedelHttpErrors.ErrNilHttpRequest
+				return motmedelErrors.MakeErrorWithStackTrace(motmedelHttpErrors.ErrNilHttpRequest)
 			}
 
 			requestHeader := request.Header
 			if requestHeader == nil {
-				return motmedelHttpErrors.ErrNilHttpRequestHeader
+				return motmedelErrors.MakeErrorWithStackTrace(motmedelHttpErrors.ErrNilHttpRequestHeader)
 			}
 
 			requestHeader.Set("Accept", "application/vnd.github+json")

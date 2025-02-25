@@ -10,8 +10,6 @@ import (
 	"strings"
 )
 
-const SignatureHeaderName = "X-Hub-Signature-256"
-
 func ParseSignature(signature string) ([]byte, error) {
 	if signature == "" {
 		return nil, motmedelErrors.MakeErrorWithStackTrace(
@@ -46,8 +44,6 @@ func ParseSignature(signature string) ([]byte, error) {
 			signatureHex,
 		)
 	}
-
-	// TODO: Check bytes length?
 
 	return signatureBytes, nil
 }

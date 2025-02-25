@@ -6,7 +6,7 @@ var (
 	ErrNilReposBaseUrl                 = errors.New("nil repos base url")
 	ErrEmptyOwner                      = errors.New("empty owner")
 	ErrEmptyName                       = errors.New("empty repository")
-	ErrEmptyBranch                     = errors.New("empty branch")
+	ErrEmptyRef                        = errors.New("empty ref")
 	ErrEmptyToken                      = errors.New("empty token")
 	ErrNilTarballReader                = errors.New("nil tarball reader")
 	ErrNilContentDisposition           = errors.New("nil content disposition")
